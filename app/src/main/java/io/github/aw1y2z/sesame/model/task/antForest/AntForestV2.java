@@ -5372,10 +5372,11 @@ public class AntForestV2 extends ModelTask {
                 return;
             }
 
-            // 以 teamHomeResult 判定当前版本：该字段只有组队主页才下发。
-            // 不能只看 nextAction：个人主页的 nextAction 可能是 WhackMole 等其它值，
-            // 据此判定会漏判成"无法确认"，从而跳过切换、组队浇水永远不执行。
-            if (homeJo.optJSONObject("teamHomeResult") == null) {
+            // 以 teamHomeResult.mainMember 判定当前版本：只有组队主页才把个人数据嵌进合种树页面。
+            // teamHomeResult 本身个人版也有（小队挑战配置），teamBaseInfo 在个人版同样会出现
+            // （已退出/受邀队伍的残留，teamWater 会以 PARAM_ILLEGAL 拒绝），nextAction 也不可靠
+            // （个人版常见 Cultivate）。
+            if (!isTeam(homeJo)) {
                 // 响应连基础字段都没有说明是异常返回，此时不要贸然修改账户设置
                 if (!homeJo.has("userBaseInfo") && !homeJo.has("nextAction") && !homeJo.has("now")) {
                     Log.record("首页响应异常(无主页字段)，跳过组队合种浇水");
@@ -5392,7 +5393,7 @@ public class AntForestV2 extends ModelTask {
                 if (homeJo == null) {
                     return;
                 }
-                if (homeJo.optJSONObject("teamHomeResult") == null) {
+                if (!isTeam(homeJo)) {
                     Log.record("切换后仍未进入组队版(可能未加入队伍)，跳过组队合种浇水");
                     return;
                 }
@@ -5559,35 +5560,16 @@ public class AntForestV2 extends ModelTask {
     }
 
     /**
-     * 按 nextAction 字面量判定：1=组队（Cultivate），0=个人（Team），-1=其它取值/字段缺失。
-     * 仅作 {@link #isTeam} 的兜底（组队主页缺少 mainMember 时用），不单独用于模式切换决策。
+     * 是否处于组队版：只有组队主页的 teamHomeResult 下才带 mainMember（个人数据被嵌进合种树页面）。
+     * <p>teamHomeResult 本身个人版也有（小队挑战配置），nextAction 同样不可靠（个人版常见
+     * Cultivate），故二者都不参与判定。
      */
-    private static int teamState(JSONObject homeObj) {
-        if (homeObj == null || !homeObj.has("nextAction")) {
-            return -1;
-        }
-        String nextAction = homeObj.optString("nextAction", "");
-        if ("Cultivate".equals(nextAction)) {
-            return 1;
-        }
-        if ("Team".equals(nextAction)) {
-            return 0;
-        }
-        return -1;
-    }
-
     private static boolean isTeam(JSONObject homeObj) {
         if (homeObj == null) {
             return false;
         }
-        // 依据 teamHomeResult.mainMember 是否下发判定组队模式：该字段只有组队主页才有，
-        // 且个人能量就在 mainMember 里；缺少时回退 nextAction（后者取值不稳定，容易漏判）。
         JSONObject teamHomeResult = homeObj.optJSONObject("teamHomeResult");
-        JSONObject mainMember = teamHomeResult != null ? teamHomeResult.optJSONObject("mainMember") : null;
-        if (mainMember != null) {
-            return true;
-        }
-        return teamState(homeObj) == 1;
+        return teamHomeResult != null && teamHomeResult.optJSONObject("mainMember") != null;
     }
 
     private static void loveteam(int waterNum) {
