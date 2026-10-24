@@ -85,17 +85,30 @@ public class ForestChouChouLe {
                 doublecheck = false;
                 JSONObject listTaskopengreen = new JSONObject(AntForestRpcCall.listTaskopengreen(sceneCode + "_TASK", "task_entry"));
                 if (MessageUtil.checkSuccess(TAG, listTaskopengreen)) {
-                    JSONArray taskList = listTaskopengreen.getJSONArray("taskInfoList");
+                    JSONArray taskList = listTaskopengreen.optJSONArray("taskInfoList");
+                    if (taskList == null) {
+                        break;
+                    }
                     for (int i = 0; i < taskList.length(); i++) {
-                        JSONObject taskInfo = taskList.getJSONObject(i);
-                        JSONObject taskBaseInfo = taskInfo.getJSONObject("taskBaseInfo");
-                        JSONObject bizInfo = new JSONObject(taskBaseInfo.getString("bizInfo"));
-                        String taskName = bizInfo.getString("title");
-                        String desc = bizInfo.getString("desc");
+                        JSONObject taskInfo = taskList.optJSONObject(i);
+                        if (taskInfo == null) {
+                            continue;
+                        }
+                        JSONObject taskBaseInfo = taskInfo.optJSONObject("taskBaseInfo");
+                        if (taskBaseInfo == null) {
+                            continue;
+                        }
+                        String bizInfoStr = taskBaseInfo.optString("bizInfo", "");
+                        if (bizInfoStr.isEmpty()) {
+                            continue;
+                        }
+                        JSONObject bizInfo = new JSONObject(bizInfoStr);
+                        String taskName = bizInfo.optString("title", "");
+                        String desc = bizInfo.optString("desc", "");
 
-                        String taskSceneCode = taskBaseInfo.getString("sceneCode");
-                        String taskStatus = taskBaseInfo.getString("taskStatus");
-                        String taskType = taskBaseInfo.getString("taskType");
+                        String taskSceneCode = taskBaseInfo.optString("sceneCode", "");
+                        String taskStatus = taskBaseInfo.optString("taskStatus", "");
+                        String taskType = taskBaseInfo.optString("taskType", "");
 
                         JSONObject taskRights = taskInfo.getJSONObject("taskRights");
                         int rightsTimes = taskRights.getInt("rightsTimes");

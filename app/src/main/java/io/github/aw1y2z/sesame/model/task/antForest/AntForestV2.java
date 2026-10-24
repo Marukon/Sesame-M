@@ -1820,12 +1820,18 @@ public class AntForestV2 extends ModelTask {
         try {
             JSONObject jo = new JSONObject(AntForestRpcCall.produceForestEnergy(scene));
             if (MessageUtil.checkResultCode(TAG, jo)) {
-                jo = jo.getJSONObject("data").getJSONObject("response");
-                energyGeneratedList = jo.getJSONArray("energyGeneratedList");
-                if (energyGeneratedList.length() > 0) {
-                    String title = scene.equals("FEEDS") ? "绿色医疗" : "电子小票";
-                    int cumulativeEnergy = jo.getInt("cumulativeEnergy");
-                    Log.forest("医疗健康🧾完成[" + title + "]#产生[" + cumulativeEnergy + "g能量]");
+                JSONObject response = jo.optJSONObject("data") == null
+                        ? null : jo.getJSONObject("data").optJSONObject("response");
+                if (response != null) {
+                    energyGeneratedList = response.optJSONArray("energyGeneratedList");
+                    if (energyGeneratedList == null) {
+                        energyGeneratedList = new JSONArray();
+                    }
+                    if (energyGeneratedList.length() > 0) {
+                        String title = scene.equals("FEEDS") ? "绿色医疗" : "电子小票";
+                        int cumulativeEnergy = response.optInt("cumulativeEnergy", 0);
+                        Log.forest("医疗健康🧾完成[" + title + "]#产生[" + cumulativeEnergy + "g能量]");
+                    }
                 }
             }
         } catch (Throwable th) {
@@ -2011,20 +2017,45 @@ public class AntForestV2 extends ModelTask {
             if (ForestHunt) {
                 JSONObject resData = new JSONObject(AntForestRpcCall.enterDrawActivityopengreen("", "ANTFOREST_NORMAL_DRAW", "task_entry"));
                 if (MessageUtil.checkSuccess(TAG, resData)) {
-                    JSONArray drawSceneGroups = resData.getJSONArray("drawSceneGroups");
-                    for (int i = 0; i < drawSceneGroups.length(); i++) {
-                        JSONObject drawScene = drawSceneGroups.getJSONObject(i);
-                        JSONObject drawActivity = drawScene.getJSONObject("drawActivity");
-                        String sceneCode = drawActivity.getString("sceneCode");
-                        JSONObject listTaskopengreen = new JSONObject(AntForestRpcCall.listTaskopengreen(sceneCode + "_TASK", "task_entry"));
-                        if (MessageUtil.checkSuccess(TAG, listTaskopengreen)) {
-                            JSONArray taskList = listTaskopengreen.getJSONArray("taskInfoList");
-                            for (int j = 0; j < taskList.length(); j++) {
-                                JSONObject taskInfo = taskList.getJSONObject(j);
-                                JSONObject taskBaseInfo = taskInfo.getJSONObject("taskBaseInfo");
-                                JSONObject bizInfo = new JSONObject(taskBaseInfo.getString("bizInfo"));
-                                String taskName = bizInfo.getString("title");
-                                AntForestHuntTaskListMap.add(taskName, taskName);
+                    JSONArray drawSceneGroups = resData.optJSONArray("drawSceneGroups");
+                    if (drawSceneGroups != null) {
+                        for (int i = 0; i < drawSceneGroups.length(); i++) {
+                            JSONObject drawScene = drawSceneGroups.optJSONObject(i);
+                            if (drawScene == null) {
+                                continue;
+                            }
+                            JSONObject drawActivity = drawScene.optJSONObject("drawActivity");
+                            if (drawActivity == null) {
+                                continue;
+                            }
+                            String sceneCode = drawActivity.optString("sceneCode", "");
+                            if (sceneCode.isEmpty()) {
+                                continue;
+                            }
+                            JSONObject listTaskopengreen = new JSONObject(AntForestRpcCall.listTaskopengreen(sceneCode + "_TASK", "task_entry"));
+                            if (MessageUtil.checkSuccess(TAG, listTaskopengreen)) {
+                                JSONArray taskList = listTaskopengreen.optJSONArray("taskInfoList");
+                                if (taskList != null) {
+                                    for (int j = 0; j < taskList.length(); j++) {
+                                        JSONObject taskInfo = taskList.optJSONObject(j);
+                                        if (taskInfo == null) {
+                                            continue;
+                                        }
+                                        JSONObject taskBaseInfo = taskInfo.optJSONObject("taskBaseInfo");
+                                        if (taskBaseInfo == null) {
+                                            continue;
+                                        }
+                                        String bizInfoStr = taskBaseInfo.optString("bizInfo", "");
+                                        if (bizInfoStr.isEmpty()) {
+                                            continue;
+                                        }
+                                        JSONObject bizInfo = new JSONObject(bizInfoStr);
+                                        String taskName = bizInfo.optString("title", "");
+                                        if (!taskName.isEmpty()) {
+                                            AntForestHuntTaskListMap.add(taskName, taskName);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2522,8 +2553,14 @@ public class AntForestV2 extends ModelTask {
             if (!MessageUtil.checkResultCode(TAG, jo)) {
                 return;
             }
-            JSONArray forestSignVOList = jo.getJSONArray("forestSignVOList");
-            JSONObject forestSignVO = forestSignVOList.getJSONObject(0);
+            JSONArray forestSignVOList = jo.optJSONArray("forestSignVOList");
+            if (forestSignVOList == null || forestSignVOList.length() == 0) {
+                return;
+            }
+            JSONObject forestSignVO = forestSignVOList.optJSONObject(0);
+            if (forestSignVO == null) {
+                return;
+            }
             String currentSignKey = forestSignVO.getString("currentSignKey"); // 当前签到的 key
             String signId = forestSignVO.getString("signId"); // 签到ID
             String sceneCode = forestSignVO.getString("sceneCode"); // 场景代码
@@ -3205,14 +3242,23 @@ public class AntForestV2 extends ModelTask {
                     Log.record("有送能量雨的机会");
                     JSONObject joEnergyRainCanGrantList = new JSONObject(AntForestRpcCall.queryEnergyRainCanGrantList());
                     TimeUtil.sleep(500);
-                    JSONArray grantInfos = joEnergyRainCanGrantList.getJSONArray("grantInfos");
+                    JSONArray grantInfos = joEnergyRainCanGrantList.optJSONArray("grantInfos");
+                    if (grantInfos == null) {
+                        return;
+                    }
                     Set<String> set = giveEnergyRainList.getValue();
                     String userId;
                     boolean granted = false;
                     for (int j = 0; j < grantInfos.length(); j++) {
-                        JSONObject grantInfo = grantInfos.getJSONObject(j);
-                        if (grantInfo.getBoolean("canGrantedStatus")) {
-                            userId = grantInfo.getString("userId");
+                        JSONObject grantInfo = grantInfos.optJSONObject(j);
+                        if (grantInfo == null) {
+                            continue;
+                        }
+                        if (grantInfo.optBoolean("canGrantedStatus", false)) {
+                            userId = grantInfo.optString("userId", "");
+                            if (userId.isEmpty()) {
+                                continue;
+                            }
                             if (set.contains(userId)) {
                                 JSONObject joEnergyRainChance = new JSONObject(AntForestRpcCall.grantEnergyRainChance(userId));
                                 TimeUtil.sleep(500);
@@ -4250,10 +4296,19 @@ public class AntForestV2 extends ModelTask {
                 JSONObject resData = new JSONObject(AntForestRpcCall.queryMyPatrolRecord());
                 TimeUtil.sleep(500);
                 if (resData.optBoolean("canSwitch")) {
-                    JSONArray records = resData.getJSONArray("records");
+                    JSONArray records = resData.optJSONArray("records");
+                    if (records == null) {
+                        break;
+                    }
                     for (int i = 0; i < records.length(); i++) {
-                        JSONObject record = records.getJSONObject(i);
-                        JSONObject userPatrol = record.getJSONObject("userPatrol");
+                        JSONObject record = records.optJSONObject(i);
+                        if (record == null) {
+                            continue;
+                        }
+                        JSONObject userPatrol = record.optJSONObject("userPatrol");
+                        if (userPatrol == null) {
+                            continue;
+                        }
                         if (userPatrol.getInt("unreachedNodeCount") > 0) {
                             if ("silent".equals(userPatrol.getString("mode"))) {
                                 JSONObject patrolConfig = record.getJSONObject("patrolConfig");
@@ -4990,7 +5045,10 @@ public class AntForestV2 extends ModelTask {
         try {
             JSONObject jo = new JSONObject(AntForestRpcCall.queryPropList(false));
             if (MessageUtil.checkResultCode(TAG, jo)) {
-                forestPropVOList = jo.getJSONArray("forestPropVOList");
+                JSONArray propList = jo.optJSONArray("forestPropVOList");
+                if (propList != null) {
+                    forestPropVOList = propList;
+                }
             }
         } catch (Throwable th) {
             Log.err(TAG, "getForestPropVOList err:", th);
@@ -5744,12 +5802,20 @@ public class AntForestV2 extends ModelTask {
         JSONObject dressDetail = new JSONObject();
         try {
             JSONObject jo = new JSONObject(AntForestRpcCall.queryHomePage());
-            JSONArray ja = jo.getJSONObject("indexDressVO").getJSONArray("dressDetailList");
-            for (int i = 0; i < ja.length(); i++) {
-                jo = ja.getJSONObject(i);
-                String position = jo.getString("position");
-                String batchType = jo.getString("batchType");
-                dressDetail.put(position, batchType);
+            JSONObject indexDressVO = jo.optJSONObject("indexDressVO");
+            JSONArray ja = indexDressVO == null ? null : indexDressVO.optJSONArray("dressDetailList");
+            if (ja != null) {
+                for (int i = 0; i < ja.length(); i++) {
+                    jo = ja.optJSONObject(i);
+                    if (jo == null) {
+                        continue;
+                    }
+                    String position = jo.optString("position", "");
+                    String batchType = jo.optString("batchType", "");
+                    if (!position.isEmpty()) {
+                        dressDetail.put(position, batchType);
+                    }
+                }
             }
         } catch (Throwable th) {
             Log.err(TAG, "getDressDetail err:", th);
